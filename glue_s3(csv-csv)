@@ -1,0 +1,50 @@
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import sum
+from pyspark.sql.types import StringType
+from awsglue.dynamicframe import DynamicFrame
+
+args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args["JOB_NAME"], args)
+
+# Script generated for node S3 bucket
+S3bucket_node1 = glueContext.create_dynamic_frame.from_catalog(
+    database="sales_database",
+    table_name="format_folder",
+    additional_options={"header": "true"},
+    transformation_ctx="S3bucket_node1"
+)
+
+dataframe = S3bucket_node1.toDF()
+
+# Perform aggregation on the DataFrame
+aggregated_df = dataframe.groupBy("date").agg(sum("price").alias("total_price"))
+
+aggregated_dynamic_frame = DynamicFrame.fromDF(aggregated_df, glueContext, "aggregated_dynamic_frame")
+
+aggregated_dynamic_frame = aggregated_dynamic_frame.coalesce(1)
+
+# Script generated for node S3 bucket
+target_path = "s3://demo-bucket-json-csv-concatenator/aggregate_folder/"
+
+S3bucket_node2 = glueContext.write_dynamic_frame.from_options(
+    frame=aggregated_dynamic_frame,
+    connection_type="s3",
+    format="csv",
+    connection_options={
+        "path": target_path,
+        "header": "true" 
+    },
+    transformation_ctx="S3bucket_node2",
+)
+
+job.commit()
